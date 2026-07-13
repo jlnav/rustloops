@@ -1,0 +1,21 @@
+[package]
+name = "YOUR_CRATE_NAME"          # replace with e.g. poly_match_rs
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "YOUR_CRATE_NAME"          # must match [package].name
+crate-type = ["cdylib"]           # required for Python extension modules
+
+[dependencies]
+pyo3    = { version = "0.29", features = ["extension-module"] }
+numpy   = "0.29"
+ndarray = "0.16"
+
+# Uncomment if you need linear algebra (norm, solve, svd, etc.):
+# ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
+
+[profile.release]
+debug         = true   # keep debug symbols for py-spy --native profiling
+lto           = true   # link-time optimisation — significant speedup
+codegen-units = 1      # maximise inlining (slower compile, faster runtime)
