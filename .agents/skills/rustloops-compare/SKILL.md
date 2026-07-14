@@ -1,3 +1,8 @@
+---
+name: rustloops-compare
+description: Re-run the before/after performance comparison for a previously accelerated function.
+---
+
 # Skill: rustloops-compare
 
 Re-run the before/after performance comparison for a previously accelerated function.

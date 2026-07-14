@@ -1,3 +1,8 @@
+---
+name: rustloops
+description: Accelerate a hot Python loop or function by translating it to Rust via PyO3/maturin.
+---
+
 # Skill: rustloops
 
 Accelerate a hot Python loop or function by translating it to Rust via PyO3/maturin.

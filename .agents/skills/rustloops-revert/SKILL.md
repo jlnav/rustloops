@@ -1,3 +1,8 @@
+---
+name: rustloops-revert
+description: Restore a Python file to its original pre-Rust state.
+---
+
 # Skill: rustloops-revert
 
 Restore a Python file to its original pre-Rust state.
