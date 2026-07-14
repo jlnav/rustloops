@@ -14,12 +14,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
-import sys
 import time
 
 # ── CONFIGURE ─────────────────────────────────────────────────────────────────
 # Replace this block with whatever sets up and calls the function under test.
 # The function MUST produce deterministic, printable output written to `output_buf`.
+
 
 def run_workload(output_buf: io.StringIO) -> None:
     """
@@ -40,6 +40,7 @@ def run_workload(output_buf: io.StringIO) -> None:
             print(p.center, file=output_buf)
     """
     raise NotImplementedError("Edit run_workload() in measure.py")
+
 
 # ── END CONFIGURE ─────────────────────────────────────────────────────────────
 
@@ -65,8 +66,9 @@ def _measure(runs: int) -> tuple[float, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="rustloops harness")
-    parser.add_argument("--runs", type=int, default=3,
-                        help="number of timed repetitions (default: 3)")
+    parser.add_argument(
+        "--runs", type=int, default=3, help="number of timed repetitions (default: 3)"
+    )
     args = parser.parse_args()
 
     mean_ms, sig = _measure(args.runs)

@@ -22,7 +22,7 @@ def run_workload(output_buf: io.StringIO) -> None:
     from particle import Particle, update
 
     rng = np.random.default_rng(42)
-    n = 2_000   # particles
+    n = 2_000  # particles
     n_steps = 50
 
     particles = [
@@ -48,6 +48,7 @@ def run_workload(output_buf: io.StringIO) -> None:
 
 
 # ── harness (do not edit below) ───────────────────────────────────────────────
+
 
 def _measure(runs: int) -> tuple[float, str]:
     times: list[float] = []

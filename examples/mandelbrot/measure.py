@@ -32,6 +32,7 @@ def run_workload(output_buf: io.StringIO) -> None:
 
 # ── harness (do not edit below) ───────────────────────────────────────────────
 
+
 def _measure(runs: int) -> tuple[float, str]:
     times: list[float] = []
     sig = ""

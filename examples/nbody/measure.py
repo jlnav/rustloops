@@ -24,8 +24,8 @@ def run_workload(output_buf: io.StringIO) -> None:
     rng = np.random.default_rng(42)
     n = 300  # bodies — gives ~0.5-2 s baseline on pure Python
 
-    pos  = rng.standard_normal((n, 3))
-    vel  = rng.standard_normal((n, 3)) * 0.1
+    pos = rng.standard_normal((n, 3))
+    vel = rng.standard_normal((n, 3)) * 0.1
     mass = rng.uniform(0.5, 2.0, n)
 
     simulate(pos, vel, mass, dt=0.01, n_steps=40)
@@ -37,6 +37,7 @@ def run_workload(output_buf: io.StringIO) -> None:
 
 
 # ── harness (do not edit below) ───────────────────────────────────────────────
+
 
 def _measure(runs: int) -> tuple[float, str]:
     times: list[float] = []

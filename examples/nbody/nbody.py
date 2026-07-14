@@ -24,8 +24,8 @@ SOFTENING = 0.1  # softening length to avoid singularities
 
 
 def step(
-    pos: np.ndarray,   # shape (N, 3), float64 — positions
-    vel: np.ndarray,   # shape (N, 3), float64 — velocities
+    pos: np.ndarray,  # shape (N, 3), float64 — positions
+    vel: np.ndarray,  # shape (N, 3), float64 — velocities
     mass: np.ndarray,  # shape (N,),   float64 — masses
     dt: float,
 ) -> None:

@@ -29,12 +29,12 @@ class Particle:
 
     def __init__(
         self,
-        pos: np.ndarray,   # shape (3,), float64
-        vel: np.ndarray,   # shape (3,), float64
+        pos: np.ndarray,  # shape (3,), float64
+        vel: np.ndarray,  # shape (3,), float64
         mass: float = 1.0,
     ) -> None:
-        self.pos  = pos.astype(np.float64)
-        self.vel  = vel.astype(np.float64)
+        self.pos = pos.astype(np.float64)
+        self.vel = vel.astype(np.float64)
         self.mass = float(mass)
 
     def kinetic_energy(self) -> float:
