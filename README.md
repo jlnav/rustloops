@@ -1,6 +1,6 @@
 # rustloops
 
-Make Python hot loops faster by translating them to Rust — without rewriting your whole codebase.
+Make Python hot loops faster by translating them to Rust.
 
 rustloops is a set of AI agent skills that wrap the
 [PyO3](https://pyo3.rs) / [maturin](https://maturin.rs) workflow into three simple commands.
