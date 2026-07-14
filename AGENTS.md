@@ -19,9 +19,9 @@
 
 | Directory | Hot target | Pattern |
 |---|---|---|
-| `examples/nbody/` | `step()` — O(N²) pairwise gravity | A + C |
+| `examples/nbody/` | `step()` — O(N²) pairwise gravity | A + C (D after rewrite) |
 | `examples/particle/` | `Particle` class + `update()` | B |
-| `examples/mandelbrot/` | `escape_counts()` — per-pixel escape time | A (scalar) |
+| `examples/mandelbrot/` | `escape_counts()` — per-pixel escape time | A (scalar) + D (rayon) |
 
 Each example has:
 - A Python module with a clearly-marked hot function/class.
@@ -35,6 +35,13 @@ When adding new examples, follow the same conventions:
 - Size the workload so the pure-Python baseline runs in roughly **0.5–3 s**.
 - Do not add pixi tasks for examples — users run `python measure.py` directly after
   activating the environment.
+- **Examples must contain only Python source** (the optimizable module + its
+  `measure.py` harness). Do not commit hand-written Rust crates, `Cargo.toml`, or built
+  extensions under `examples/`. The whole point of an example is to be a *pure-Python
+  starting point* that the rustloops skill translates to Rust on demand; any Rust
+  wiring is generated at run time into `<module_name>_rs/` at the repo root, not stored
+  in the example. This applies to Pattern D too: the parallel Rust version is produced
+  by the skill, while the example stays a plain Python loop.
 
 ## What belongs where
 

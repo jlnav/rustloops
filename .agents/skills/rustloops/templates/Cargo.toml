@@ -15,6 +15,9 @@ ndarray = "0.16"
 # Uncomment if you need linear algebra (norm, solve, svd, etc.):
 # ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
 
+# Uncomment for Pattern D (data parallelism across CPU cores via rayon):
+# rayon = "1"
+
 [profile.release]
 debug         = true   # keep debug symbols for py-spy --native profiling
 lto           = true   # link-time optimisation — significant speedup

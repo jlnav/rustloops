@@ -1,7 +1,13 @@
 # rustloops Pattern Cookbook
 
-Three leveled patterns derived from the poly-match worked example.
+Four patterns for accelerating hot Python loops in Rust.
 Each pattern has a Python-before and Rust-after snippet you can adapt directly.
+
+- **Patterns A / B / C** are leveled: A (function wrap) → B (`#[pyclass]` data class)
+  → C (allocation avoidance). Apply them in order for compounding speedups.
+- **Pattern D** (rayon data parallelism) is *orthogonal*: it layers on top of A/C to
+  spread an embarrassingly-parallel loop across CPU cores. Reach for it only after the
+  serial Rust version is correct, and only when loop iterations are independent.
 
 ---
 
@@ -68,7 +74,7 @@ fn find_close_polygons<'py>(
 
 **`Cargo.toml` deps needed:**
 ```toml
-numpy = "0.22"
+numpy = "0.29"
 ndarray = "0.16"
 ```
 
@@ -167,7 +173,7 @@ class Polygon(_PolygonRs):
 
 **`Cargo.toml` deps needed:**
 ```toml
-numpy = "0.22"
+numpy = "0.29"
 ndarray = "0.16"
 ```
 
@@ -209,6 +215,165 @@ let dist = ((cv[0] - query[0]).powi(2) + (cv[1] - query[1]).powi(2)).sqrt();
 
 ---
 
+## Pattern D — Data parallelism with rayon (v4)
+
+**When to use:** The hot loop is *embarrassingly parallel* — each iteration is
+independent and can run in any order. Layer this on top of a working Pattern A/C
+translation to spread iterations across all CPU cores.
+
+**Speedup ballpark:** near-linear in core count on top of A/C (e.g. 4–8x on a typical
+laptop), heavily dependent on workload size — tiny loops lose to thread overhead.
+
+### Is the loop actually embarrassingly parallel?
+
+Check every box before parallelizing. If any fails, the loop needs a rewrite first
+(see the N-body caveat below) or is not a candidate for Pattern D:
+
+- [ ] Each iteration writes to a **disjoint** output slot (e.g. its own row/pixel/index).
+- [ ] Iterations only **read** shared inputs; they never mutate shared state.
+- [ ] There is **no cross-iteration dependency** (iteration `i` does not depend on `i-1`).
+- [ ] No accumulation into a shared variable (or the accumulation is a reduction —
+      use `.par_iter().sum()` / `.reduce(...)` instead of a shared `+=`).
+
+### Python before (mandelbrot escape-time, per-row loop)
+
+```python
+def escape_counts(width, height, max_iter=200,
+                  x_min=-2.5, x_max=1.0, y_min=-1.25, y_max=1.25):
+    counts = np.empty((height, width), dtype=np.uint32)
+    x_step = (x_max - x_min) / width
+    y_step = (y_max - y_min) / height
+    for row in range(height):            # <-- rows are independent
+        ci = y_min + row * y_step
+        for col in range(width):
+            cr = x_min + col * x_step
+            zr = zi = 0.0
+            n = 0
+            while n < max_iter:
+                zr2, zi2 = zr * zr, zi * zi
+                if zr2 + zi2 > 4.0:
+                    break
+                zi = 2.0 * zr * zi + ci
+                zr = zr2 - zi2 + cr
+                n += 1
+            counts[row, col] = n
+    return counts
+```
+
+### Rust after (`lib.rs`) — serial inner loop, parallel over rows
+
+```rust
+use numpy::{PyArray2, ToPyArray};
+use ndarray::Array2;
+use pyo3::prelude::*;
+use rayon::prelude::*;
+
+#[pyfunction]
+#[pyo3(signature = (width, height, max_iter=200,
+                    x_min=-2.5, x_max=1.0, y_min=-1.25, y_max=1.25))]
+fn escape_counts<'py>(
+    py: Python<'py>,
+    width: usize,
+    height: usize,
+    max_iter: u32,
+    x_min: f64,
+    x_max: f64,
+    y_min: f64,
+    y_max: f64,
+) -> Bound<'py, PyArray2<u32>> {
+    let x_step = (x_max - x_min) / width as f64;
+    let y_step = (y_max - y_min) / height as f64;
+
+    // Flat output buffer; each row is a disjoint chunk of `width` elements.
+    let mut counts = vec![0u32; width * height];
+
+    // Release the GIL so rayon threads run truly in parallel, then split the
+    // buffer into per-row chunks and process each row on its own thread.
+    py.allow_threads(|| {
+        counts
+            .par_chunks_mut(width)          // one &mut [u32] per row — disjoint
+            .enumerate()
+            .for_each(|(row, row_buf)| {
+                let ci = y_min + row as f64 * y_step;
+                for (col, slot) in row_buf.iter_mut().enumerate() {
+                    let cr = x_min + col as f64 * x_step;
+                    let (mut zr, mut zi) = (0.0f64, 0.0f64);
+                    let mut n = 0u32;
+                    while n < max_iter {
+                        let (zr2, zi2) = (zr * zr, zi * zi);
+                        if zr2 + zi2 > 4.0 {
+                            break;
+                        }
+                        zi = 2.0 * zr * zi + ci;
+                        zr = zr2 - zi2 + cr;
+                        n += 1;
+                    }
+                    *slot = n;
+                }
+            });
+    });
+
+    Array2::from_shape_vec((height, width), counts)
+        .expect("shape matches buffer length")
+        .to_pyarray(py)
+}
+```
+
+**Key points:**
+- `use rayon::prelude::*;` brings the parallel iterator methods into scope.
+- `par_chunks_mut(width)` splits the flat buffer into non-overlapping `&mut [u32]`
+  slices, one per row. Because the slices are disjoint, Rust's borrow checker proves
+  the parallel writes are data-race-free **at compile time** — no `unsafe` needed.
+- Swapping `.iter()`→`.par_iter()` or `.chunks_mut()`→`.par_chunks_mut()` is usually
+  the entire change: keep the inner loop body identical to the serial version.
+- Wrap the parallel region in `py.allow_threads(|| { ... })` to **release the GIL**.
+  Without this, only one rayon thread can hold the GIL and you get no speedup. Do all
+  Python object access *outside* the `allow_threads` closure.
+- For a shared accumulation (a sum, min/max, etc.) do **not** use `par_chunks_mut` with
+  a shared variable — use a reduction: `(0..n).into_par_iter().map(...).sum()` or
+  `.reduce(|| identity, |a, b| combine(a, b))`.
+
+### Caveat: not every loop is parallel as written (the N-body case)
+
+The N-body `step()` inner loop applies a *symmetric* update:
+
+```python
+acc[i] += mass[j] * a      # writes body i
+acc[j] -= mass[i] * a      # AND writes body j  <-- conflict under parallelism
+```
+
+Parallelizing the outer `i` loop directly is a data race: two threads can write the same
+`acc[j]`. To make it Pattern-D-safe, **drop the `j > i` symmetry** and compute each
+body's full acceleration independently (each thread writes only its own `acc[i]`):
+
+```rust
+acc.par_chunks_mut(3).enumerate().for_each(|(i, ai)| {
+    for j in 0..n {
+        if i == j { continue; }
+        // ... compute pull of j on i, write only ai[0..3] ...
+    }
+});
+```
+
+This does ~2x the arithmetic (no reuse of the symmetric pair) but removes the write
+conflict, and the parallel speedup more than pays for it. **Lesson:** when iterations
+write to shared slots, transform the loop to make each iteration's writes disjoint
+*before* reaching for rayon.
+
+### Benchmarking note
+
+Parallel timings are noisier than serial ones (thread scheduling, turbo boost, other
+processes). Take the median of several runs, and control thread count with the
+`RAYON_NUM_THREADS` environment variable when comparing — e.g. `RAYON_NUM_THREADS=1`
+isolates the serial cost, higher values show scaling.
+
+**`Cargo.toml` deps needed:**
+```toml
+rayon = "1"
+```
+
+---
+
 ## Gotchas table
 
 | Symptom | Cause | Fix |
@@ -221,7 +386,11 @@ let dist = ((cv[0] - query[0]).powi(2) + (cv[1] - query[1]).powi(2)).sqrt();
 | `ndarray-linalg` linker error (macOS) | OpenBLAS not found | Use `features = ["openblas-static"]` or `brew install openblas && OPENBLAS_PATH=$(brew --prefix openblas) maturin develop --release` |
 | Output signature mismatch | Floating-point ordering or precision difference | Sort results before hashing; use `f64` throughout |
 | `ImportError` at runtime | Extension not installed or stale `.so` | Re-run `maturin develop --release` in the crate dir |
-| `pyo3` version mismatch with `numpy` crate | `numpy 0.22` requires `pyo3 0.22.*` | Pin both to same minor: `pyo3 = "0.22"`, `numpy = "0.22"` |
+| `pyo3` version mismatch with `numpy` crate | `numpy 0.29` requires `pyo3 0.29.*` | Pin both to same minor: `pyo3 = "0.29"`, `numpy = "0.29"` |
+| Pattern D: no speedup from rayon | GIL still held during the parallel loop | Wrap the parallel region in `py.allow_threads(\|\| { ... })` |
+| Pattern D: `cannot borrow ... as mutable more than once` | Trying to share one mutable buffer across threads | Split into disjoint slices with `par_chunks_mut` / `par_iter_mut` |
+| Pattern D: results differ per run | Shared `+=` accumulation across threads (race) | Use a reduction (`.sum()`, `.reduce(...)`) instead of a shared variable |
+| Pattern D: slower than serial | Loop too small; thread overhead dominates | Only parallelize when the workload is large; fall back to serial for small N |
 
 ---
 
@@ -229,12 +398,15 @@ let dist = ((cv[0] - query[0]).powi(2) + (cv[1] - query[1]).powi(2)).sqrt();
 
 ```toml
 [dependencies]
-pyo3    = { version = "0.22", features = ["extension-module"] }
-numpy   = "0.22"
+pyo3    = { version = "0.29", features = ["extension-module"] }
+numpy   = "0.29"
 ndarray = "0.16"
 
 # Only if you need linear algebra (norm, solve, etc.):
 ndarray-linalg = { version = "0.16", features = ["openblas-static"] }
+
+# Only for Pattern D (data parallelism across CPU cores):
+rayon = "1"
 ```
 
 > **Version alignment rule:** `numpy` crate minor must equal `pyo3` minor.

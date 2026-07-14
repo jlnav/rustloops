@@ -105,8 +105,16 @@ Read the target function. Determine:
 | Does it accept/return numpy arrays? | Use `PyReadonlyArray` / `PyArray` (Pattern A) |
 | Is there a hot data class whose fields are accessed many times? | Move class to Rust `#[pyclass]` (Pattern B) |
 | Are temporary allocations (`Vec`, `.to_owned()`) inside the inner loop? | Apply alloc-avoidance (Pattern C) |
+| Are loop iterations independent (each writes a disjoint output slot, no cross-iteration dependency)? | Parallelize across CPU cores with rayon (Pattern D) |
 
 Consult `patterns.md` (same directory as this file) for before/after templates.
+
+**Patterns A/B/C are leveled** — apply in order for compounding speedups. **Pattern D
+is orthogonal**: it layers data parallelism on top of a *correct serial* Rust
+translation. Only reach for it once the serial version passes the output-signature
+check, and only if the "embarrassingly parallel" checklist in `patterns.md` holds.
+If iterations write to shared slots (e.g. the symmetric N-body update), the loop must
+be rewritten so each iteration's writes are disjoint before parallelizing.
 
 ---
 
@@ -203,7 +211,23 @@ rustloops result for <fn> in <file>
 Next steps:
   - Pattern B: move Polygon to #[pyclass] for another 2-3x
   - Pattern C: eliminate inner-loop allocations for another 1.5x
+  - Pattern D: if loop iterations are independent, parallelize with rayon
+               for near-linear scaling across CPU cores
   Run rustloops-compare to re-benchmark after further changes.
+```
+
+### If Pattern D (rayon) was applied
+
+When the translation uses rayon, **tell the user they can control the thread count**
+with the `RAYON_NUM_THREADS` environment variable. Add these lines to the report:
+
+```
+Parallelism:
+  This build uses rayon and runs across all CPU cores by default.
+  Set RAYON_NUM_THREADS to cap threads, e.g.:
+    RAYON_NUM_THREADS=1  <test_command>   # force serial (isolates per-core cost)
+    RAYON_NUM_THREADS=4  <test_command>   # limit to 4 threads
+  Parallel timings are noisier — take the median of several runs when comparing.
 ```
 
 Append to `manifest.json` history:
@@ -216,7 +240,7 @@ Append to `manifest.json` history:
 
 ## Reference files
 
-- **patterns.md** — Pattern A / B / C before-after templates, gotchas table
+- **patterns.md** — Pattern A / B / C / D before-after templates, gotchas table (D = rayon data parallelism)
 - **templates/Cargo.toml** — copy-ready Cargo manifest
 - **templates/lib.rs** — `#[pymodule]` skeleton
 - **templates/measure.py** — timing + output-signature harness; used as the base when the skill generates a measure.py for the user

@@ -8,6 +8,9 @@ use pyo3::prelude::*;
 // use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyArray1, ToPyArray};
 // use ndarray::Array1;
 // use pyo3::types::PyList;
+//
+// ── Pattern D: uncomment for rayon data parallelism ─────────────────────────
+// use rayon::prelude::*;   // then wrap the parallel loop in py.allow_threads(|| { ... })
 
 // #[pyfunction]
 // fn my_function<'py>(
