@@ -152,7 +152,7 @@ We also need something to measure.
 import time
 import poly_match
 import os
-  
+
 # Reduce noise, actually improve perf in our case.
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
@@ -173,7 +173,7 @@ print(f"Took and avg of {took * 1000:.2f}ms per iteration")
 It’s not very scientific, but it’s going to take us *very* far.
 
 > “Good benchmarking is hard. Having said that, do not stress too much about having a perfect benchmarking setup, particularly when you start optimizing a program.”
-> 
+>
 > ~ Nicholas Nethercote, in [“The Rust Performance Book”](https://nnethercote.github.io/perf-book/benchmarking.html)
 
 Running this script will give us our baseline:
@@ -313,13 +313,13 @@ I’m going to just copy and paste the original Python function, and fix the syn
 #[pyfunction]
 fn find_close_polygons(polygons: Vec<PyObject>, point: PyObject, max_dist: f64) -> PyResult<Vec<PyObject>> {
     let mut close_polygons = vec![];
-    
+
     for poly in polygons {
         if norm(poly.center - point) < max_dist {
             close_polygons.push(poly)
         }
     }
-    
+
     Ok(close_polygons)
 }
 ```
@@ -354,7 +354,7 @@ We need three crates to implement our function:
 ndarray = "0.15"
 
 # For a `norm` function for arrays.
-ndarray-linalg = "0.16"  
+ndarray-linalg = "0.16"
 
 # For accessing numpy-created objects, based on `ndarray`.
 numpy = "0.18"
@@ -455,7 +455,7 @@ We expect this version to have some advantage over the original function, but ho
 ```bash
 $ (cd ./poly_match_rs/ && maturin develop)
 $ python measure.py
-Took an avg of 609.46ms per iteration 
+Took an avg of 609.46ms per iteration
 ```
 
 So.. Is Rust just super slow? No! We just forgot to ask for speed! If we run with `maturin develop --release` we get much better results:
@@ -475,7 +475,7 @@ We also want to see into our native code, so we are going to enable debug symbol
 [profile.release]
 debug = true       # Debug symbols for our profiler.
 lto = true         # Link-time optimization.
-codegen-units = 1  # Slower compilation but faster code. 
+codegen-units = 1  # Slower compilation but faster code.
 ```
 
 ## v2 - Rewrite even more in Rust
@@ -570,9 +570,9 @@ impl Polygon {
             center,
         }
     }
-    
+
     // the `Py<..>` in the return type is a way of saying "an Object owned by Python".
-    #[getter]               
+    #[getter]
     fn x(&self, py: Python<'_>) -> PyResult<Py<PyArray1<f64>>> {
         Ok(self.x.to_pyarray(py).to_owned()) // Create a Python-owned, numpy version of `x`.
     }
@@ -666,7 +666,7 @@ This our problematic snippet:
 let center = poly.borrow(py).center
     .to_owned();
 
-if (center - point).norm() < max_dist { ... } 
+if (center - point).norm() < max_dist { ... }
 ```
 
 What we want is to avoid that `to_owned`. But we need an owned object for `norm`, so we’ll have to implement that manually.
@@ -890,11 +890,11 @@ fn poly_match_rs(_py: Python, m: &PyModule) -> PyResult<()> {
 ## Takeaways
 
 -   Rust (with the help of pyo3) unlocks true native performance for everyday Python code, with minimal compromises.
-    
+
 -   Python is a superb API for researchers, and crafting fast building blocks with Rust is an extremely powerful combination.
-    
+
 -   Profiling is super interesting, and it pushes you to truly understand everything that’s happening in your code.
-    
+
 
 And finally: computers are *crazy fast*. The next time you wait for something to complete, consider firing up a profiler, you might learn something new 🚀
 
@@ -1562,7 +1562,7 @@ Workflow the SKILL.md instructs the agent to follow:
 - Runs the test script once to confirm the Python-only version still works; reports timing (sanity check that we're back to baseline).
 
 ## README.md
-Draft a top-level `README.md` covering: what rustloops is, the PyO3/maturin approach + credit to the blog post, prerequisites (pixi, rust, maturin, py-spy), how to invoke each of the three skills, the manifest/backup model, and a worked example (the poly-match case). 
+Draft a top-level `README.md` covering: what rustloops is, the PyO3/maturin approach + credit to the blog post, prerequisites (pixi, rust, maturin, py-spy), how to invoke each of the three skills, the manifest/backup model, and a worked example (the poly-match case).
 
 ## Files to be created (on approval)
 ```
