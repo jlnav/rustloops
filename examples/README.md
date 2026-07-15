@@ -10,9 +10,9 @@ that the skills can drive directly.
 
 | Example | Hot target | Pattern | Expected speedup | Baseline target |
 |---|---|---|---|---|
-| `nbody/` | `step()` — O(N²) pairwise gravity | A + C | ~20–50x | ~0.5–2 s |
+| `nbody/` | `step()` — O(N²) pairwise gravity | A + C | ~20–50x (D after rewrite) | ~0.5–2 s |
 | `particle/` | `Particle` class + `update()` | B | ~10–30x | ~0.5–1.5 s |
-| `mandelbrot/` | `escape_counts()` — per-pixel iteration | A (scalar) | ~50–100x | ~1–3 s |
+| `mandelbrot/` | `escape_counts()` — per-pixel iteration | A (scalar) + D (rayon) | ~50–100x, near-linear in core count with D | ~1–3 s |
 
 ---
 
@@ -30,6 +30,8 @@ pixi shell
 
 Pattern A (numpy array function wrap) + Pattern C (eliminate per-iteration allocations).
 Each body pair requires a distance calculation; the O(N²) Python loop is the bottleneck.
+After the serial Rust version is working, the loop can be rewritten to drop the `j > i`
+symmetry and parallelized with rayon (Pattern D) for near-linear scaling in core count.
 
 ### particle — Particle data class
 
@@ -42,8 +44,10 @@ inside a 2 000-particle loop dominates runtime. Moving the class to Rust elimina
 
 > "Speed up `escape_counts` in `examples/mandelbrot/mandelbrot.py` — test with `python measure.py`"
 
-Pattern A (scalar-heavy). Pure scalar complex arithmetic in a double loop — no numpy
-ufunc can help. The strongest possible case for Rust; the dramatic closing demo.
+Pattern A (scalar-heavy) + Pattern D (rayon). Pure scalar complex arithmetic in a double
+loop — no numpy ufunc can help. Each pixel is independent, making this the canonical
+candidate for Pattern D: after translating to Rust, a single swap from `.iter()`
+to `.par_chunks_mut()` spreads rows across all CPU cores with near-linear scaling.
 
 ---
 

@@ -73,9 +73,9 @@ each targeting a different pattern.  They are the fastest way to see the skills 
 
 | Example | Hot target | Pattern | Expected speedup |
 |---|---|---|---|
-| `examples/nbody/` | `step()` — O(N²) pairwise gravity | A + C | ~20–50x |
+| `examples/nbody/` | `step()` — O(N²) pairwise gravity | A + C | ~20–50x (D after rewrite) |
 | `examples/particle/` | `Particle` class + `update()` | B | ~10–30x |
-| `examples/mandelbrot/` | `escape_counts()` — per-pixel escape time | A (scalar) | ~50–100x |
+| `examples/mandelbrot/` | `escape_counts()` — per-pixel escape time | A (scalar) + D (rayon) | ~50–100x, near-linear in core count with D |
 
 Each example has a ready-to-paste prompt in `examples/README.md`.
 
@@ -137,16 +137,21 @@ The same call signature, now dispatching to a Rust function via PyO3.
 
 **After applying Pattern C** (eliminate inner-loop allocations, ~6 ms, ~48x faster).
 
+**After applying Pattern D** (parallelize with rayon, sub-2 ms on multi-core).
+
 ---
 
 ## Pattern cookbook
 
-The skills include a cookbook at `.agents/skills/rustloops/patterns.md` with three
-leveled patterns:
+The skills include a cookbook at `.agents/skills/rustloops/patterns.md` with four
+patterns:
 
 - **Pattern A** — Translate a function that takes numpy arrays (5–15x speedup).
 - **Pattern B** — Move a hot data class to a Rust `#[pyclass]` (additional 2–4x).
 - **Pattern C** — Eliminate per-iteration heap allocations (additional 1.5–2x).
+- **Pattern D** — Parallelize independent iterations across CPU cores with
+  [rayon](https://docs.rs/rayon) (near-linear scaling in core count, orthogonal to
+  A/B/C — layers on top of a correct serial translation).
 
 Each pattern has a Python-before / Rust-after snippet and a gotchas table.
 
@@ -185,7 +190,10 @@ Each pattern has a Python-before / Rust-after snippet and a gotchas table.
 | Type mismatch `f64` vs `f32` | Cast on Python side: `arr.astype(np.float64)` before passing. |
 | Linker error (`-lopenblas`) on macOS | Use `features = ["openblas-static"]` or `brew install openblas`. |
 | Output signature mismatch | Results are in non-deterministic order. Sort before hashing. |
-| `pyo3` / `numpy` version conflict | Pin both to the same minor version: `pyo3 = "0.22"`, `numpy = "0.22"`. |
+| `pyo3` / `numpy` version conflict | Pin both to the same minor version: `pyo3 = "0.29"`, `numpy = "0.29"`. |
+| Parallel (rayon) slower than serial | Workload too small for thread overhead; fall back to serial for tiny N. |
+| Rayon parallel loop has no speedup | GIL still held; wrap the parallel region in `py.allow_threads(\|\| { ... })`. |
+| Parallel results differ per run | Shared accumulation (`+=`) across threads; rewrite each iteration to write a disjoint output slot. |
 
 ---
 
@@ -193,4 +201,6 @@ Each pattern has a Python-before / Rust-after snippet and a gotchas table.
 
 - **numpy-focused.** scipy patterns (e.g. `cdist`, `ConvexHull`) are noted as future work.
 - **One crate per Python module.** Multiple hot functions in the same file share a crate.
+- **Data parallelism via rayon.** Embarrassingly-parallel loops can be spread across
+  all available CPU cores with near-linear scaling (Pattern D in the cookbook).
 - Works with any Python environment (pixi, conda, virtualenv, system Python).
